@@ -33,7 +33,7 @@ local AttackRemote = Remotes:WaitForChild('PlayerClickAttackSkill')
 --============================================================
 local RAID_ID = 1000001
 local HOST_MAP_ID = 50003
-local LOBBY_MAP_ID = 50007 -- 👈 set this to your actual lobby map id
+local LOBBY_MAP_ID = 50008 -- 👈 set this to your actual lobby map id
 local RAID_DURATION = 600 -- from your config's EndIntervel
 
 --============================================================
