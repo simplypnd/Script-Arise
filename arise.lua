@@ -1,229 +1,458 @@
--- Services
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local CoreGui = game:GetService("CoreGui")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
+--// Combined: Auto City Raid Joiner + Return to Lobby + UI (with toggles)
+-- Place this in StarterPlayerScripts
 
--- Create ScreenGui
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+--============================================================
+-- Services
+--============================================================
+local Players = game:GetService('Players')
+local RunService = game:GetService('RunService')
+local ReplicatedStorage = game:GetService('ReplicatedStorage')
+local TweenService = game:GetService('TweenService')
+local UserInputService = game:GetService('UserInputService')
+local LocalPlayer = Players.LocalPlayer
+
+--============================================================
+-- Modules (game-specific)
+--============================================================
+local NotifyManager =
+    require(ReplicatedStorage.Scripts.Share.Manager.NotifyManager)
+local MapManager = require(ReplicatedStorage.Scripts.Client.Manager.MapManager)
+local CityRaid =
+    require(ReplicatedStorage.Scripts.Client.Manager.CityRaidManager)
+
+--============================================================
+-- Remotes
+--============================================================
+local Remotes = ReplicatedStorage:WaitForChild('Remotes')
+local EvTeleport = Remotes:WaitForChild('StartLocalPlayerTeleport')
+local EvEnterRaid = Remotes:WaitForChild('EnterCityRaidMap')    
+local AttackRemote = Remotes:WaitForChild('PlayerClickAttackSkill')
+
+--============================================================
+-- Config (edit as needed)
+--============================================================
+local RAID_ID = 1000001
+local HOST_MAP_ID = 50003
+local LOBBY_MAP_ID = 50007 -- 👈 set this to your actual lobby map id
+local RAID_DURATION = 600 -- from your config's EndIntervel
+
+--============================================================
+-- Helpers (shared)
+--============================================================
+local function now()
+    return os.clock()
+end
+
+local function currentMapId()
+    return MapManager.currentMapData
+        and MapManager.currentMapData.mapSlotInfo
+        and MapManager.currentMapData.mapSlotInfo.mapId
+end
+
+local function teleportTo(mapId)
+    local ok, err = pcall(function()
+        EvTeleport:FireServer({ mapId = mapId })
+    end)
+    if not ok then
+        warn('[Teleport] failed:', err)
+    else
+        print('[Teleport] ->', mapId)
+    end
+end
+
+local function waitForArrival(targetMapId, timeout)
+    local t0 = now()
+    while now() - t0 < (timeout or 25) do
+        if currentMapId() == targetMapId then
+            return true
+        end
+        RunService.Heartbeat:Wait()
+    end
+    return false
+end
+
+local function waitForRaidData(raidId, timeout)
+    local t0 = now()
+    timeout = timeout or 10
+    while now() - t0 < timeout do
+        if
+            CityRaid
+            and CityRaid.rankInfos
+            and CityRaid.rankInfos[raidId] ~= nil
+        then
+            return true
+        end
+        RunService.Heartbeat:Wait()
+    end
+    return false
+end
+
+local function enterCityRaid(raidId)
+    if not EvEnterRaid then
+        return
+    end
+    waitForRaidData(raidId)
+    local ok, err = pcall(function()
+        EvEnterRaid:FireServer(raidId)
+    end)
+    if not ok then
+        warn('[EnterRaid] Failed:', err)
+    else
+        print('[EnterRaid] Joined raid', raidId)
+    end
+end
+
+--============================================================
+-- UI
+--============================================================
+local ScreenGui = Instance.new('ScreenGui')
+ScreenGui.Parent = LocalPlayer:WaitForChild('PlayerGui')
 ScreenGui.ResetOnSpawn = false
 
--- Variables for drag control
-local dragging
-local dragInput
-local dragStart
-local startPos
-
--- Main window
-local Frame = Instance.new("Frame")
-Frame.Size = UDim2.new(0, 250, 0, 250) -- Increased initial size
-Frame.Position = UDim2.new(0.35, 0, 0.3, 0)
-Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-Frame.BorderSizePixel = 0
+local Frame = Instance.new('Frame')
+Frame.Size = UDim2.new(0, 220, 0, 290)
+Frame.Position = UDim2.new(0.4, 0, 0.3, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Frame.Parent = ScreenGui
-Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 8)
+Frame.ClipsDescendants = true
+Instance.new('UICorner', Frame).CornerRadius = UDim.new(0, 8)
 
--- Title bar (for dragging)
-local TitleBar = Instance.new("Frame")
-TitleBar.Size = UDim2.new(1, 0, 0, 30)
-TitleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+-- Title bar
+local TitleBar = Instance.new('Frame')
+TitleBar.Size = UDim2.new(1, 0, 0, 25)
+TitleBar.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 TitleBar.BorderSizePixel = 0
 TitleBar.Parent = Frame
-Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 8)
 
--- Centered title
-local Titulo = Instance.new("TextLabel")
-Titulo.Size = UDim2.new(0.8, 0, 1, 0)
-Titulo.Position = UDim2.new(0.1, 0, 0, 0)
-Titulo.BackgroundTransparency = 1
-Titulo.Text = "RN TEAM"
-Titulo.TextColor3 = Color3.fromRGB(255, 255, 255)
-Titulo.Font = Enum.Font.SourceSansBold
-Titulo.TextSize = 16
-Titulo.TextXAlignment = Enum.TextXAlignment.Center
-Titulo.Parent = TitleBar
+local TitleText = Instance.new('TextLabel')
+TitleText.Size = UDim2.new(1, -80, 1, 0)
+TitleText.Position = UDim2.new(0, 10, 0, 0)
+TitleText.BackgroundTransparency = 1
+TitleText.Text = '⚙ Utilities'
+TitleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleText.Font = Enum.Font.SourceSansBold
+TitleText.TextSize = 16
+TitleText.TextXAlignment = Enum.TextXAlignment.Left
+TitleText.Parent = TitleBar
 
--- Minimize button
-local MinimizeButton = Instance.new("TextButton")
-MinimizeButton.Size = UDim2.new(0, 30, 0, 30)
-MinimizeButton.Position = UDim2.new(1, -30, 0, 0)
-MinimizeButton.BackgroundTransparency = 1
-MinimizeButton.Text = "-"
-MinimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-MinimizeButton.Font = Enum.Font.SourceSansBold
-MinimizeButton.TextSize = 20
-MinimizeButton.Parent = TitleBar
-
--- Content container WITH SCROLLING (scrollbar invisible)
-local ContentContainer = Instance.new("ScrollingFrame")
-ContentContainer.Size = UDim2.new(1, -10, 1, -60)
-ContentContainer.Position = UDim2.new(0, 5, 0, 35)
-ContentContainer.BackgroundTransparency = 1
-ContentContainer.BorderSizePixel = 0
-ContentContainer.ScrollBarThickness = 0 -- Invisible scrollbar
-ContentContainer.ScrollBarImageColor3 = Color3.fromRGB(0, 0, 0)
-ContentContainer.ScrollBarImageTransparency = 1
-ContentContainer.ClipsDescendants = true
-ContentContainer.Parent = Frame
-
--- Layout to organize elements
-local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Padding = UDim.new(0, 10)
-UIListLayout.Parent = ContentContainer
-
--- Fixed text at the bottom (credits)
-local Creditos = Instance.new("TextLabel")
-Creditos.Size = UDim2.new(1, 0, 0, 30)
-Creditos.Position = UDim2.new(0, 0, 1, -30)
-Creditos.BackgroundTransparency = 1
-Creditos.Text = "YouTube: RN_TEAM"
-Creditos.TextColor3 = Color3.fromRGB(200, 200, 200)
-Creditos.Font = Enum.Font.SourceSansBold
-Creditos.TextSize = 16
-Creditos.Parent = Frame
-
--- Background frame to allow dragging over the whole UI
-local BackgroundDrag = Instance.new("Frame")
-BackgroundDrag.Size = UDim2.new(1, 0, 1, 0)
-BackgroundDrag.BackgroundTransparency = 1
-BackgroundDrag.BorderSizePixel = 0
-BackgroundDrag.ZIndex = 0
-BackgroundDrag.Parent = Frame
-
--- Drag function
-local function update(input)
-	local delta = input.Position - dragStart
-	Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+-- Title buttons
+local buttonSize, padding = 25, 5
+local function createTitleButton(symbol, order)
+    local btn = Instance.new('TextButton')
+    btn.Size = UDim2.new(0, buttonSize, 1, 0)
+    btn.Position = UDim2.new(1, -((buttonSize + padding) * order), 0, 0)
+    btn.BackgroundTransparency = 1
+    btn.Text = symbol
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 16
+    btn.Parent = TitleBar
+    return btn
 end
 
--- Connect drag events to title bar and background
-local function connectDragEvents(frame)
-	frame.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			dragStart = input.Position
-			startPos = Frame.Position
-			
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					dragging = false
-				end
-			end)
-		end
-	end)
+local CloseButton = createTitleButton('X', 1)
+local MinMaxButton = createTitleButton('–', 2)
 
-	frame.InputChanged:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-			dragInput = input
-		end
-	end)
-end
-
-connectDragEvents(TitleBar)
-connectDragEvents(BackgroundDrag)
-
-UserInputService.InputChanged:Connect(function(input)
-	if input == dragInput and dragging then
-		update(input)
-	end
-end)
-
--- Function to auto-adjust window height
-local function adjustWindowHeight()
-    local minHeight = 250
-    local maxHeight = 450
-    local contentHeight = UIListLayout.AbsoluteContentSize.Y + 80
-    
-    local newHeight = math.clamp(contentHeight, minHeight, maxHeight)
-    
-    local tween = TweenService:Create(
-        Frame,
-        TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        {Size = UDim2.new(0, 250, 0, newHeight)}
-    )
-    tween:Play()
-    
-    ContentContainer.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y)
-end
-
--- Minimize/maximize
+-- Minimize / Maximize
 local isMinimized = false
 local originalSize = Frame.Size
-local minimizedSize = UDim2.new(0, 250, 0, 30)
-
-MinimizeButton.MouseButton1Click:Connect(function()
-	isMinimized = not isMinimized
-	
-	if isMinimized then
-		local tween = TweenService:Create(Frame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = minimizedSize})
-		tween:Play()
-		ContentContainer.Visible = false
-		Creditos.Visible = false
-		BackgroundDrag.Visible = false
-		MinimizeButton.Text = "+"
-	else
-		local tween = TweenService:Create(Frame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = originalSize})
-		tween:Play()
-		ContentContainer.Visible = true
-		Creditos.Visible = true
-		BackgroundDrag.Visible = true
-		MinimizeButton.Text = "-"
-	end
+local function minimize()
+    if isMinimized then
+        return
+    end
+    isMinimized = true
+    MinMaxButton.Text = '□'
+    TweenService
+        :Create(Frame, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
+            Size = UDim2.new(
+                originalSize.X.Scale,
+                originalSize.X.Offset,
+                0,
+                25
+            ),
+        })
+        :Play()
+end
+local function maximize()
+    if not isMinimized then
+        return
+    end
+    isMinimized = false
+    MinMaxButton.Text = '–'
+    TweenService:Create(Frame, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
+        Size = originalSize,
+    }):Play()
+end
+MinMaxButton.MouseButton1Click:Connect(function()
+    if isMinimized then
+        maximize()
+    else
+        minimize()
+    end
 end)
 
--- Button style: bar
-local function CreateButton(text, callback)
-	local Button = Instance.new("TextButton")
-	Button.Size = UDim2.new(1, 0, 0, 35)
-	Button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-	Button.Text = text
-	Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-	Button.Font = Enum.Font.SourceSansBold
-	Button.TextSize = 18
-	Button.ZIndex = 1
-	Button.Parent = ContentContainer
-	Instance.new("UICorner", Button).CornerRadius = UDim.new(0, 6)
-
-	Button.MouseEnter:Connect(function()
-		Button.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-	end)
-	Button.MouseLeave:Connect(function()
-		Button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-	end)
-
-	Button.MouseButton1Click:Connect(callback)
-	return Button
+-- Draggable
+do
+    local dragging, dragStart, startPos, inputConn
+    local function update(input)
+        local delta = input.Position - dragStart
+        Frame.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+    TitleBar.InputBegan:Connect(function(input)
+        if
+            input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch
+        then
+            dragging = true
+            dragStart = input.Position
+            startPos = Frame.Position
+            if inputConn then
+                inputConn:Disconnect()
+            end
+            inputConn = input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    if inputConn then
+                        inputConn:Disconnect()
+                        inputConn = nil
+                    end
+                end
+            end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if
+            dragging
+            and (
+                input.UserInputType == Enum.UserInputType.MouseMovement
+                or input.UserInputType == Enum.UserInputType.Touch
+            )
+        then
+            update(input)
+        end
+    end)
 end
 
--- Toggle (checkbox)
-local function CreateToggle(text, callback)
-    local ToggleContainer = Instance.new("Frame")
-    ToggleContainer.Size = UDim2.new(1, 0, 0, 30)
-    ToggleContainer.BackgroundTransparency = 1
-    ToggleContainer.ZIndex = 1
-    ToggleContainer.Parent = ContentContainer
+--============================================================
+-- Globals / State
+--============================================================
+_G.KillAuraEnabled = false
+_G.HitboxSize = 999999999
+_G.NPCFolder = workspace:FindFirstChild('Enemys')
+_G.AttackEnemyGUID = 'f9dd63f1-fc6a-4860-bcc8-a65046a8ca4d'
 
-    local Toggle = Instance.new("TextButton")
-    Toggle.Size = UDim2.new(1, 0, 1, 0)
-    Toggle.BackgroundTransparency = 1
-    Toggle.Text = text
-    Toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Toggle.Font = Enum.Font.SourceSansBold
-    Toggle.TextSize = 18
-    Toggle.TextXAlignment = Enum.TextXAlignment.Left
-    Toggle.ZIndex = 1
-    Toggle.Parent = ToggleContainer
+local autoRaidEnabled = false
+local raidEventConn: RBXScriptConnection? = nil
+local watchdogThread: thread? = nil
 
-    local Box = Instance.new("Frame", Toggle)
-    Box.Size = UDim2.new(0, 20, 0, 20)
-    Box.Position = UDim2.new(1, -25, 0.5, -10)
-    Box.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    Box.ZIndex = 1
-    Instance.new("UICorner", Box).CornerRadius = UDim.new(0, 4)
-
-    return Toggle, Box
+--============================================================
+-- Kill Aura
+--============================================================
+local attackThread
+local function startAttackLoop()
+    if attackThread then
+        return
+    end
+    attackThread = task.spawn(function()
+        while _G.KillAuraEnabled do
+            pcall(function()
+                AttackRemote:FireServer({ attackEnemyGUID = _G.AttackEnemyGUID })
+            end)
+            task.wait()
+        end
+        attackThread = nil
+    end)
 end
+
+local function stopAttackLoop()
+    _G.KillAuraEnabled = false
+    -- attackThread will self-terminate on next loop tick
+end
+
+local function modifyNPCs()
+    if not _G.NPCFolder then
+        return
+    end
+    for _, npc in pairs(_G.NPCFolder:GetChildren()) do
+        if npc:IsA('Model') and npc:FindFirstChild('HumanoidRootPart') then
+            pcall(function()
+                if _G.KillAuraEnabled then
+                    npc.HumanoidRootPart.Size =
+                        Vector3.new(_G.HitboxSize, _G.HitboxSize, _G.HitboxSize)
+                    npc.HumanoidRootPart.CanCollide = false
+                else
+                    npc.HumanoidRootPart.Size = Vector3.new(2, 2, 1)
+                    npc.HumanoidRootPart.CanCollide = true
+                end
+            end)
+        end
+    end
+end
+RunService.RenderStepped:Connect(function()
+    pcall(modifyNPCs)
+end)
+
+--============================================================
+-- Auto City Raid (toggleable)
+--============================================================
+local function onRaidUpdate(data)
+    if not autoRaidEnabled or not data then
+        return
+    end
+
+    -- Open
+    if data.id == RAID_ID and data.action == 'OpenCityRaid' then
+        print('[RaidWatcher] Raid opened. Teleporting to host map...')
+        teleportTo(HOST_MAP_ID)
+        if waitForArrival(HOST_MAP_ID, 15) then
+            task.wait(2)
+            enterCityRaid(RAID_ID)
+        end
+    end
+
+    -- Close
+    if
+        data.id == RAID_ID
+        and (
+            data.action == 'CloseCityRaid'
+            or data.state == 'End'
+            or data.isOpen == 0
+        )
+    then
+        print('[RaidWatcher] Raid closed. Returning to lobby...')
+        teleportTo(LOBBY_MAP_ID)
+    end
+end
+
+local function startRaidWatcher()
+    if raidEventConn == nil then
+        raidEventConn = NotifyManager.RegisterClientEvent(
+            NotifyManager.EventData.UpdateCityRaidInfo,
+            onRaidUpdate
+        )
+    end
+
+    -- Watchdog thread (restarts each enable)
+    if watchdogThread then
+        task.cancel(watchdogThread)
+    end
+    watchdogThread = task.spawn(function()
+        local t0 = now()
+        while autoRaidEnabled and (now() - t0) < RAID_DURATION do
+            RunService.Heartbeat:Wait()
+        end
+        if autoRaidEnabled and currentMapId() == HOST_MAP_ID then
+            print(
+                '[RaidWatcher] Watchdog: Raid duration expired. Teleporting to lobby...'
+            )
+            teleportTo(LOBBY_MAP_ID)
+        end
+    end)
+end
+
+local function stopRaidWatcher()
+    autoRaidEnabled = false
+    if watchdogThread then
+        task.cancel(watchdogThread)
+        watchdogThread = nil
+    end
+    -- keep the connection but it won't act while disabled (guarded by flag)
+    -- if you prefer, uncomment to fully disconnect:
+    -- if raidEventConn then raidEventConn:Disconnect(); raidEventConn = nil end
+end
+
+--============================================================
+-- Button Factory
+--============================================================
+local function makeButton(text, yPos, callback)
+    local btn = Instance.new('TextButton')
+    btn.Size = UDim2.new(1, -20, 0, 40)
+    btn.Position = UDim2.new(0, 10, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 18
+    btn.Text = text
+    btn.Parent = Frame
+    Instance.new('UICorner', btn).CornerRadius = UDim.new(0, 6)
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+--============================================================
+-- Buttons
+--============================================================
+-- Kill Aura Toggle
+local killAuraButton
+killAuraButton = makeButton('Kill Aura: OFF', 35, function()
+    _G.KillAuraEnabled = not _G.KillAuraEnabled
+    if _G.KillAuraEnabled then
+        killAuraButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+        killAuraButton.Text = 'Kill Aura: ON'
+        startAttackLoop()
+    else
+        killAuraButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+        killAuraButton.Text = 'Kill Aura: OFF'
+        stopAttackLoop()
+    end
+    print('Kill Aura:', _G.KillAuraEnabled and 'ON' or 'OFF')
+end)
+
+-- Auto City Raid Toggle
+local raidButton
+raidButton = makeButton('Auto City Raid: OFF', 85, function()
+    autoRaidEnabled = not autoRaidEnabled
+    if autoRaidEnabled then
+        raidButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+        raidButton.Text = 'Auto City Raid: ON'
+        print('[RaidWatcher] Enabled.')
+        startRaidWatcher()
+    else
+        raidButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+        raidButton.Text = 'Auto City Raid: OFF'
+        print('[RaidWatcher] Disabled.')
+        stopRaidWatcher()
+    end
+end)
+
+-- Optional: Quick Return to Lobby button
+local lobbyButton
+lobbyButton = makeButton('Return to Lobby', 135, function()
+    teleportTo(LOBBY_MAP_ID)
+end)
+
+-- Optional: Quick Go Host Map button
+local hostButton
+hostButton = makeButton('Go Host Map', 185, function()
+    teleportTo(HOST_MAP_ID)
+end)
+
+-- Spacer for future actions
+makeButton('—', 235, function() end).Active = false
+
+--============================================================
+-- Close Button Cleanup
+--============================================================
+CloseButton.MouseButton1Click:Connect(function()
+    -- disable features
+    _G.KillAuraEnabled = false
+    stopAttackLoop()
+
+    if autoRaidEnabled then
+        stopRaidWatcher()
+    end
+    -- If you decided to hard-disconnect the Notify connection, do it here as well:
+    -- if raidEventConn then raidEventConn:Disconnect(); raidEventConn = nil end
+
+    ScreenGui:Destroy()
+    print('❌ UI closed.')
+end)
+
+print(
+    '✅ Combined UI loaded: Kill Aura + Auto City Raid toggle + quick teleports.'
+)
