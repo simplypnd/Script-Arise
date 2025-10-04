@@ -6,4 +6,3 @@ Todo
 - encrypt
 - key system
 - new ui
-- kiss mami
