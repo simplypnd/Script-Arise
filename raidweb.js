@@ -45,7 +45,7 @@ local CITY_HUB_ID = 50003
 
 -- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 -- WEBHOOK SETTINGS (edit this)
-local WEBHOOK_URL = 'https://discord.com/api/webhooks/PUT_YOURS_HERE'
+local WEBHOOK_URL = 'https://discord.com/api/webhooks/1425363829168017443/6R7lz9sfU1LdW9y7sp4zl9_8VqAagtm5eZwS_hcWjZxZFRhaS1y0eBiyqbErUQlYi7ya'
 -- <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 -- City Raids
