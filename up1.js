@@ -393,8 +393,15 @@ local function ensureRaidEvent()
                 end
 
                 if #raidList > 0 then
+                    -- wrap each raid name with ** for bold markdown in Discord
+                    for i, name in ipairs(raidList) do
+                        raidList[i] = "** -" .. name .. "**"
+                    end
+
+                    -- join all with newline separator
                     local combinedText = table.concat(raidList, "\n")
-                    sendDiscordWebhook("🏹 Raid Entrance Appeared:", combinedText, nil, 0xFF8800)
+
+                    sendDiscordWebhook("🏹 Raid Opened:", combinedText, nil, 0xFF8800)
                 end
             end
         )
