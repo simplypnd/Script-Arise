@@ -395,7 +395,7 @@ local function ensureRaidEvent()
                 if #raidList > 0 then
                     -- wrap each raid name with ** for bold markdown in Discord
                     for i, name in ipairs(raidList) do
-                        raidList[i] = "** -" .. name .. "**"
+                        raidList[i] = "**" .. name .. "**"
                     end
 
                     -- join all with newline separator
