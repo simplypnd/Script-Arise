@@ -545,7 +545,7 @@ AgentManager.RegisterEvent(AgentManager.EventNames.GainRaidsSuccessChest, functi
 	end)
 
 	-- After the cooldown, attempt to re-create & enter the SAME raidId ONCE (regardless of openSet visibility)
-	task.delay(30, function()
+	task.delay(17, function()
 		if not CR_running then return end
 
 		CR_startOne(targetId)
