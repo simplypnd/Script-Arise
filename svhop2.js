@@ -218,6 +218,7 @@ raidLabel.Parent = frame
 
 task.spawn(function()
 	statusLabel.Text = "Status: checking CityRaid4..."
+	task.wait(1)
 
 	-- Step 1: Go to host map for CityRaid4
 	if currentMapId() ~= HOST_MAP_ID then
