@@ -581,7 +581,7 @@ AgentManager.RegisterEvent(AgentManager.EventNames.GainRaidsSuccessChest, functi
 	-- After the cooldown (measured from raid start), attempt to re-create & enter the SAME raidId ONCE
 	local startedAt = CR_lastStartTime[targetId] or os.clock()
 	local elapsed   = os.clock() - startedAt
-	local waitSecs  = (elapsed >= 25) and 1 or (25 - elapsed)
+	local waitSecs  = (elapsed >= 30) and 1 or (25 - elapsed)
 
 	task.delay(waitSecs, function()
 		if not CR_running then return end
