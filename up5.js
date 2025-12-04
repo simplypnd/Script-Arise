@@ -59,7 +59,7 @@ local RAID_DEFS = {
 	[1000001] = { id=1000001, name="Monster Siege 1", hostMapId=50003, duration=1800, mapName="Map201" },
 	[1000002] = { id=1000002, name="Monster Siege 2", hostMapId=50007, duration=1800, mapName="Map202" },
 	[1000003] = { id=1000003, name="Monster Siege 3", hostMapId=50010, duration=1800, mapName="Map203" },
-	[1000004] = { id=1000004, name="Monster Siege 4", hostMapId=50013, duration=7200, mapName="Map204" },
+    [1000004] = { id=1000004, name="Monster Siege 4", hostMapId=50013, duration=7200, mapName="Map204" },
 }
 
 local LOBBY_MAP_ID    = 50001
